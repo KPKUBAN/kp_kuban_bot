@@ -171,18 +171,25 @@ def send_report(context):
 
 
 if __name__ == '__main__':
-    updater = Updater(TELEGRAM_TOKEN)
-    dp = updater.dispatcher
-    jq = updater.job_queue
+    from telegram.ext import ApplicationBuilder
 
-    dp.add_handler(CommandHandler('start', start))
-    dp.add_handler(MessageHandler(filters.Entity('url'), handle_link))
-    dp.add_handler(InlineQueryHandler(inline_query))
-    dp.add_handler(CommandHandler('digest', digest))
-    dp.add_handler(InlineQueryHandler(inline_chosen, run_async=True))
+    app = (
+        ApplicationBuilder()
+        .token(TELEGRAM_TOKEN)
+        .build()
+    )
 
-    jq.run_repeating(auto_announce, interval=1800, first=10)
-    jq.run_repeating(send_report, interval=604800, first=0)
+    # Регистрируем команды и обработчики
+    app.add_handler(CommandHandler('start', start))
+    app.add_handler(MessageHandler(filters.Entity('url'), handle_link))
+    app.add_handler(InlineQueryHandler(inline_query))
+    app.add_handler(CommandHandler('digest', digest))
+    app.add_handler(InlineQueryHandler(inline_chosen))
 
-    updater.start_polling()
-    updater.idle()
+    # Запланированные задачи
+    job_queue = app.job_queue
+    job_queue.run_repeating(auto_announce, interval=1800, first=10)
+    job_queue.run_repeating(send_report, interval=604800, first=0)
+
+    # Запуск бота
+    app.run_polling()
