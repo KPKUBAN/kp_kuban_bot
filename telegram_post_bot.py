@@ -4,7 +4,8 @@ import sqlite3
 import requests
 from bs4 import BeautifulSoup
 from datetime import datetime, timedelta
-from telegram import ParseMode
+from telegram import InputMediaPhoto
+from telegram.constants import ParseMode
 from telegram.ext import (
     Updater, CommandHandler, MessageHandler,
     InlineQueryHandler, Filters, CallbackContext
