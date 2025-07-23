@@ -110,6 +110,7 @@ def post_article(context, url, chat_id=None):
 
 # === Хэндлеры ===
 def start(update, context):
+    print(">>> start handler called with chat_id=", update.effective_chat.id)
     update.message.reply_text(
         "Привет! Отправь ссылку на статью, и я подготовлю пост в стиле КП-Кубань."
     )
