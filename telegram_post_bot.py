@@ -84,7 +84,8 @@ def generate_styled_post(content: str) -> str:
         "с эмодзи, короткими абзацами. Текст: "
         + content
     )
-    result = styler(prompt, max_length=512)
+    # Генерируем не больше 128 «новых» токенов – заметно быстрее
+    result = styler(prompt, max_new_tokens=128)
     return result[0]['generated_text']
 
 # === Публикация статьи ===
