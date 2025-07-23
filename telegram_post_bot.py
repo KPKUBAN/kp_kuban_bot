@@ -84,12 +84,12 @@ def generate_styled_post(content: str) -> str:
         "с эмодзи, короткими абзацами. Текст: "
         + content
     )
-    # Генерируем не больше 128 «новых» токенов – заметно быстрее
+    # Ограничим длину ответа 128 токенами для скорости
     result = styler(prompt, max_new_tokens=128)
     return result[0]['generated_text']
 
 # === Публикация статьи ===
-async def post_article(context: ContextTypes.DEFAULT_TYPE, url: str, chat_id: int = None):
+async def post_article(context: ContextTypes.DEFAULT_TYPE, url: str, chat_id: int):
     html = fetch_html(url)
     data = parse_article(html)
     combined = f"{data['title']}\n\n{data['lead']}\n\n{data['text']}"
@@ -99,15 +99,14 @@ async def post_article(context: ContextTypes.DEFAULT_TYPE, url: str, chat_id: in
         logger.error(f"Rewriting failed: {e}")
         styled = combined
 
-    target = chat_id or context.job.chat_id if hasattr(context, 'job') else context.application.bot_data.get('last_chat_id', ADMIN_CHAT_ID)
-
+    # Жёстко используем переданный chat_id
     if data['images']:
-        await context.bot.send_photo(chat_id=target, photo=data['images'][0])
-    await context.bot.send_message(chat_id=target, text=styled, parse_mode=ParseMode.HTML)
+        await context.bot.send_photo(chat_id=chat_id, photo=data['images'][0])
+    await context.bot.send_message(chat_id=chat_id, text=styled, parse_mode=ParseMode.HTML)
 
     db_conn.execute(
         'INSERT INTO posts (chat_id, date, url) VALUES (?,?,?)',
-        (target, datetime.utcnow().isoformat(), url)
+        (chat_id, datetime.utcnow().isoformat(), url)
     )
     db_conn.commit()
 
@@ -117,13 +116,11 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "Привет! Отправь ссылку на статью, и я подготовлю пост в стиле КП-Кубань."
     )
-    # Сохраним chat_id, чтобы было кому потом реджобу слать
-    context.application.bot_data['last_chat_id'] = update.effective_chat.id
 
 async def handle_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text.strip()
     print(f">>> handle_link called with text: {text}")
-    await post_article(context, text)
+    await post_article(context, text, chat_id=update.effective_chat.id)
 
 async def inline_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.inline_query.query
@@ -160,7 +157,7 @@ async def auto_announce(context: ContextTypes.DEFAULT_TYPE):
             'SELECT 1 FROM posts WHERE url=?', (url,)
         ).fetchone()
         if not exists:
-            await post_article(context, url)
+            await post_article(context, url, chat_id=ADMIN_CHAT_ID)
 
 async def send_report(context: ContextTypes.DEFAULT_TYPE):
     week_ago = datetime.utcnow() - timedelta(days=7)
@@ -168,13 +165,13 @@ async def send_report(context: ContextTypes.DEFAULT_TYPE):
         'SELECT COUNT(*) FROM posts WHERE date>?', (week_ago.isoformat(),)
     ).fetchone()[0]
     msg = f"За прошлую неделю бот опубликовал {count} постов."
-    await context.bot.send_message(ADMIN_CHAT_ID, msg)
+    await context.bot.send_message(chat_id=ADMIN_CHAT_ID, text=msg)
 
 # === Точка входа ===
 if __name__ == '__main__':
     app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
 
-    # Регистрируем хэндлеры
+    # Регистрируем команды
     app.add_handler(CommandHandler('start', start))
     app.add_handler(MessageHandler(filters.Entity('url'), handle_link))
     app.add_handler(InlineQueryHandler(inline_query))
@@ -182,9 +179,9 @@ if __name__ == '__main__':
     app.add_handler(InlineQueryHandler(inline_chosen))
 
     # Планируем автозапуски
-    job_queue = app.job_queue
-    job_queue.run_repeating(auto_announce, interval=1800, first=10)
-    job_queue.run_repeating(send_report, interval=604800, first=0)
+    jq = app.job_queue
+    jq.run_repeating(auto_announce, interval=1800, first=10)
+    jq.run_repeating(send_report, interval=604800, first=0)
 
     print("🚀 Бот запущен!")
     app.run_polling()
