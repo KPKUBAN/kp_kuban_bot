@@ -1,3 +1,4 @@
+# telegram_post_bot.py
 import os
 import logging
 import sqlite3
@@ -7,8 +8,12 @@ from datetime import datetime, timedelta
 from telegram import InputMediaPhoto
 from telegram.constants import ParseMode
 from telegram.ext import (
-    Updater, CommandHandler, MessageHandler,
-    InlineQueryHandler, Filters, CallbackContext
+    Updater,
+    CommandHandler,
+    MessageHandler,
+    InlineQueryHandler,
+    CallbackContext,
+    filters
 )
 from transformers import pipeline
 import feedparser
@@ -49,6 +54,7 @@ def fetch_html(url):
     resp = requests.get(url)
     resp.raise_for_status()
     return resp.text
+
 
 def parse_article(html):
     soup = BeautifulSoup(html, 'html.parser')
@@ -108,9 +114,11 @@ def start(update, context):
         "Привет! Отправь ссылку на статью, и я подготовлю пост в стиле КП-Кубань."
     )
 
+
 def handle_link(update, context):
     url = update.message.text.strip()
     post_article(context, url)
+
 
 def inline_query(update, context):
     query = update.inline_query.query
@@ -126,9 +134,11 @@ def inline_query(update, context):
     ]
     update.inline_query.answer(results, cache_time=0)
 
+
 def inline_chosen(update, context):
     url = update.chosen_inline_result.query
     post_article(context, url, chat_id=update.chosen_inline_result.from_user.id)
+
 
 def digest(update, context):
     week_ago = datetime.utcnow() - timedelta(days=7)
@@ -138,6 +148,7 @@ def digest(update, context):
     ).fetchall()
     text = "Топ-5 постов за неделю:\n" + '\n'.join(f"- {r[0]}" for r in rows)
     update.message.reply_text(text)
+
 
 def auto_announce(context):
     feed = feedparser.parse(RSS_FEED_URL)
@@ -149,6 +160,7 @@ def auto_announce(context):
         if not exists:
             post_article(context, url)
 
+
 def send_report(context):
     week_ago = datetime.utcnow() - timedelta(days=7)
     count = db_conn.execute(
@@ -157,13 +169,14 @@ def send_report(context):
     msg = f"За прошлую неделю бот опубликовал {count} постов."
     context.bot.send_message(ADMIN_CHAT_ID, msg)
 
+
 if __name__ == '__main__':
     updater = Updater(TELEGRAM_TOKEN)
     dp = updater.dispatcher
     jq = updater.job_queue
 
     dp.add_handler(CommandHandler('start', start))
-    dp.add_handler(MessageHandler(Filters.entity('url'), handle_link))
+    dp.add_handler(MessageHandler(filters.Entity('url'), handle_link))
     dp.add_handler(InlineQueryHandler(inline_query))
     dp.add_handler(CommandHandler('digest', digest))
     dp.add_handler(InlineQueryHandler(inline_chosen, run_async=True))
