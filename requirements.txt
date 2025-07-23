@@ -1,6 +1,0 @@
-python-telegram-bot==20.3.0
-beautifulsoup4
-requests
-transformers
-torch
-feedparser
